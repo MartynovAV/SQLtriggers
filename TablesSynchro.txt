@@ -1,0 +1,171 @@
+DROP DATABASE if exists task2;
+
+CREATE DATABASE task2;
+USE task2;
+
+CREATE TABLE shop1 (
+   ShopID INT NOT NULL,
+   GoodsID INT NOT NULL,
+   Price DOUBLE NOT NULL,
+   UpdateDateTime DATETIME NOT NULL);
+
+CREATE TABLE shop2 (
+   ShopID INT NOT NULL,
+   GoodsID INT NOT NULL,
+   Price DOUBLE NOT NULL,
+   UpdateDateTime DATETIME NOT NULL);
+
+CREATE TABLE shopglobal (
+   ShopID INT NOT NULL,
+   GoodsID INT NOT NULL,
+   Price DOUBLE NOT NULL,
+   UpdateDateTime DATETIME NOT NULL,
+   Region VARCHAR(45) NOT NULL);
+
+#булевские переменные для синхронизации вставок в таблицы:
+SET @Trigger_shop1_ins=TRUE;
+SET @Trigger_shop2_ins=TRUE;
+SET @Trigger_global_ins=TRUE;
+
+#триггер на вставку значений из shop1 в Shopglobal
+DELIMITER $$
+CREATE TRIGGER shop1_global_insert
+AFTER INSERT ON shop1 FOR EACH ROW
+BEGIN
+	IF(@Trigger_shop1_ins=TRUE) THEN
+		SET @Trigger_global_ins=FALSE;
+			INSERT INTO shopglobal(ShopID,GoodsID,Price,UpdateDateTime, Region)
+			VALUES(new.ShopID,new.GoodsID,new.Price,new.UpdateDateTime, 'shop1');
+		SET @Trigger_global_ins=TRUE;
+	END IF;	
+END$$
+DELIMITER ;
+
+#триггер на вставку значений из shop2 в Shopglobal
+DELIMITER $$
+CREATE TRIGGER shop2_global_insert
+AFTER INSERT ON shop2 FOR EACH ROW
+BEGIN
+	IF(@Trigger_shop2_ins=TRUE) THEN
+		SET @Trigger_global_ins=FALSE;
+			INSERT INTO shopglobal(ShopID,GoodsID,Price,UpdateDateTime, Region)
+			VALUES(new.ShopID,new.GoodsID,new.Price,new.UpdateDateTime, 'shop2');
+		SET @Trigger_global_ins=TRUE;
+	END IF;
+END$$
+DELIMITER ;
+
+#триггер на вставку значений из Shopglobal в shop1 или shop2
+DELIMITER $$
+CREATE TRIGGER global_insert
+AFTER INSERT ON shopglobal FOR EACH ROW
+BEGIN
+    IF(@Trigger_global_ins=TRUE) THEN
+		IF NEW.Region='shop1' THEN
+			SET @Trigger_shop1_ins=FALSE;
+				INSERT INTO shop1(ShopID,GoodsID,Price,UpdateDateTime)
+				VALUES(new.ShopID,new.GoodsID,new.Price,new.UpdateDateTime);
+			SET @Trigger_shop1_ins=TRUE;
+		ELSEIF NEW.Region='shop2' THEN
+			SET @Trigger_shop2_ins=FALSE;
+				INSERT INTO shop2(ShopID,GoodsID,Price,UpdateDateTime)
+				VALUES(new.ShopID,new.GoodsID,new.Price,new.UpdateDateTime);
+			SET @Trigger_shop2_ins=TRUE;
+		END IF;	
+	END IF;
+END$$
+DELIMITER ;
+
+# вставка значений
+INSERT INTO shop1 (ShopID,GoodsID,Price,UpdateDateTime) 
+VALUES  ('1', '20','55.0','2019-07-07 14:20:00');
+INSERT INTO shop2 (ShopID,GoodsID,Price,UpdateDateTime) 
+VALUES  ('5', '34','112.0','2019-08-08 11:35:00');
+INSERT INTO shopglobal (ShopID,GoodsID,Price,UpdateDateTime, Region) 
+VALUES  ('3', '12','74.0','2019-09-09 15:25:00','shop1');
+INSERT INTO shopglobal (ShopID,GoodsID,Price,UpdateDateTime, Region) 
+VALUES  ('7', '51','45.0','2019-10-10 15:25:00','shop2');
+
+select* from shop1;
+select* from shop2;
+select* from shopglobal;
+
+#булевские переменные для синхронизации изменений в таблицах:
+SET @Trigger_shop1_update=TRUE;
+SET @Trigger_shop2_update=TRUE;
+SET @Trigger_global_update=TRUE;
+
+#триггер на изменения значений из shop1 в Shopglobal 
+DELIMITER $$
+CREATE TRIGGER shop1_global_update
+AFTER UPDATE ON shop1 FOR EACH ROW
+BEGIN
+	IF(@Trigger_shop1_update=TRUE) THEN
+		SET @Trigger_global_update=FALSE;
+			UPDATE shopglobal
+			SET ShopID=new.ShopID,Price=new.Price,UpdateDateTime=new.UpdateDateTime
+			WHERE Region='shop1' AND GoodsID=new.GoodsID;	
+		SET @Trigger_global_update=TRUE;
+	END IF;	
+END$$
+DELIMITER ;
+
+#триггер на изменения значений из shop2 в Shopglobal
+DELIMITER $$
+CREATE TRIGGER shop2_global_update
+AFTER UPDATE ON shop2 FOR EACH ROW
+BEGIN
+	IF(@Trigger_shop2_update=TRUE) THEN
+		SET @Trigger_global_update=FALSE;
+			UPDATE shopglobal
+			SET ShopID=new.ShopID,Price=new.Price,UpdateDateTime=new.UpdateDateTime
+			WHERE Region='shop2' AND GoodsID=new.GoodsID;	
+		SET @Trigger_global_update=TRUE;
+	END IF;	
+END$$
+DELIMITER ;
+
+#триггер на изменение значений из Shopglobal в shop1 или shop2
+DELIMITER $$
+CREATE TRIGGER global_update
+AFTER UPDATE ON shopglobal FOR EACH ROW
+BEGIN
+    IF(@Trigger_global_update=TRUE) THEN
+		IF NEW.Region='shop1' THEN
+			SET @Trigger_shop1_update=FALSE;
+				UPDATE shop1
+				SET ShopID=new.ShopID,Price=new.Price,UpdateDateTime=new.UpdateDateTime
+				WHERE GoodsID=new.GoodsID;	
+			SET @Trigger_shop1_update=TRUE;
+		ELSEIF NEW.Region='shop2' THEN
+			SET @Trigger_shop2_update=FALSE;
+				UPDATE shop2
+				SET ShopID=new.ShopID,Price=new.Price,UpdateDateTime=new.UpdateDateTime
+				WHERE GoodsID=new.GoodsID;	
+			SET @Trigger_shop2_update=TRUE;
+		END IF;	
+	END IF;
+END$$
+DELIMITER ;
+
+#изменение значений
+UPDATE shop1 
+SET ShopID=11,Price=87.0, UpdateDateTime='2019-07-07 18:20:00'
+WHERE GoodsID=20;
+
+UPDATE shop2 
+SET ShopID=15,Price=100.0, UpdateDateTime='2019-08-08 21:20:00'
+WHERE GoodsID=34;
+
+UPDATE shopglobal 
+SET ShopID=13,Price=81.0, UpdateDateTime='2019-09-09 12:20:00'
+WHERE GoodsID=12 and Region='shop1';
+
+UPDATE shopglobal 
+SET ShopID=17,Price=55.0, UpdateDateTime='2019-10-10 11:20:00'
+WHERE GoodsID=51 and Region='shop2';
+
+select* from shop1;
+select* from shop2;
+select* from shopglobal;
+
